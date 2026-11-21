@@ -1,0 +1,151 @@
+:root {
+  --bg: #12141c;
+  --panel: #1b1f2b;
+  --line: #2e3446;
+  --text: #e6e1cf;
+  --muted: #8f8a7a;
+  --accent: #e4b85a;
+  --pixel: "Press Start 2P", monospace;
+  --body: "VT323", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  font-size: 20px;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  border-bottom: 2px solid var(--line);
+  background: var(--panel);
+  flex-wrap: wrap;
+}
+#topbar h1 {
+  font-family: var(--pixel);
+  font-size: 12px;
+  margin: 0;
+  color: var(--accent);
+  letter-spacing: 1px;
+}
+.clock { font-size: 24px; flex: 1; }
+.clock #ui-time { color: var(--muted); margin-left: 6px; }
+
+button {
+  font-family: var(--pixel);
+  font-size: 10px;
+  color: var(--text);
+  background: #262c3d;
+  border: 2px solid var(--line);
+  padding: 6px 8px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--accent); }
+button.active { background: var(--accent); color: #1b1420; border-color: var(--accent); }
+.speed { display: flex; gap: 4px; }
+
+main {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#stage {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  background: #0b0d12;
+}
+
+#game {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  display: block;
+}
+
+.dialog {
+  position: absolute;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  width: min(640px, calc(100% - 32px));
+  background: rgba(16, 18, 28, 0.94);
+  border: 3px solid var(--text);
+  box-shadow: 0 0 0 3px #000, 6px 6px 0 3px rgba(0, 0, 0, 0.5);
+  padding: 16px 20px;
+  cursor: pointer;
+}
+.dialog p {
+  margin: 0 0 12px;
+  white-space: pre-line;
+  line-height: 1.15;
+  font-size: 22px;
+  min-height: 9em;
+}
+.dialog #begin { float: right; }
+.dialog::after { content: ""; display: block; clear: both; }
+.hidden { display: none; }
+
+#panel {
+  width: 280px;
+  flex-shrink: 0;
+  background: var(--panel);
+  border-left: 2px solid var(--line);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+#panel h2 {
+  font-family: var(--pixel);
+  font-size: 10px;
+  color: var(--accent);
+  margin: 0 0 8px;
+}
+dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  margin: 0 0 8px;
+}
+dt { color: var(--muted); }
+dd { margin: 0; text-align: right; }
+
+.log-section { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+#log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  font-size: 18px;
+}
+#log li { padding: 2px 0; border-bottom: 1px solid var(--line); }
+.log-time { color: var(--muted); margin-right: 4px; }
+
+@media (max-width: 800px) {
+  main { flex-direction: column; }
+  #stage { flex: none; height: 56vw; }
+  #panel { width: auto; border-left: none; border-top: 2px solid var(--line); flex: 1; }
+  #topbar h1 { width: 100%; }
+  .dialog { bottom: 8px; padding: 10px 12px; }
+  .dialog p { font-size: 18px; min-height: 0; }
+}

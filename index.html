@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stochastic Idle</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <header id="topbar">
+      <h1>STOCHASTIC IDLE</h1>
+      <div class="clock"><span id="ui-day">Day 1</span> <span id="ui-time">09:00</span></div>
+      <div class="speed">
+        <button data-speed="pause" title="Pause">II</button>
+        <button data-speed="1">1x</button>
+        <button data-speed="2">2x</button>
+        <button data-speed="4">4x</button>
+        <button data-speed="8">8x</button>
+      </div>
+    </header>
+
+    <main>
+      <div id="stage">
+        <canvas id="game"></canvas>
+        <div id="intro" class="dialog">
+          <p id="intro-text">
+            You've been dropped off on a remote stretch of coast with nothing but the clothes on your back.
+
+            Nothing here is scripted. Every tree, every tide, every step your survivor takes is drawn from a probability distribution.
+
+            Your survivor acts on their own. Watch, wait, and see how long they last.
+
+            (For now they can only wander. Food, fire, shelter and the rest come later.)
+          </p>
+          <button id="begin">BEGIN &#9656;</button>
+        </div>
+      </div>
+
+      <aside id="panel">
+        <section>
+          <h2>SURVIVOR</h2>
+          <dl>
+            <dt>Run</dt><dd>1</dd>
+            <dt>Level</dt><dd>1</dd>
+            <dt>Days lived</dt><dd id="ui-days">0.00</dd>
+            <dt>Doing</dt><dd id="ui-activity">-</dd>
+          </dl>
+        </section>
+        <section>
+          <h2>WORLD</h2>
+          <dl>
+            <dt>Seed</dt><dd id="ui-seed">-</dd>
+          </dl>
+          <button id="new-world">NEW WORLD</button>
+        </section>
+        <section class="log-section">
+          <h2>LOG</h2>
+          <ul id="log"></ul>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script src="js/rng.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/world.js"></script>
+  <script src="js/survivor.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
