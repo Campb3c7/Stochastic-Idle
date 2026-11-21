@@ -17,8 +17,8 @@ Plain HTML5 Canvas + vanilla JavaScript. There are no dependencies and no build 
 so it runs anywhere and loads instantly.
 
 - `js/rng.js`: seeded RNG (mulberry32) with exponential/normal samplers and forkable streams
-- `js/sprites.js`: pixel-art sprites defined as text grids, plus procedural pine trees
-- `js/world.js`: world generation (coastline, forest edge, trees, decor) and walkability
+- `js/sprites.js`: pixel-art sprites defined as text grids, plus procedural broadleaf trees
+- `js/world.js`: world generation (coastline, creek, trees, decor) and walkability
 - `js/physiology.js`: body composition, energy expenditure, fuel partitioning, water balance, sleep
 - `js/survivor.js`: the survivor's needs-driven behaviour and what they know
 - `js/game.js`: fixed-timestep simulation loop, rendering, UI
