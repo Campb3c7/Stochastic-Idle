@@ -14,29 +14,45 @@
     <header id="topbar">
       <h1>STOCHASTIC IDLE</h1>
       <div class="clock"><span id="ui-day">Day 1</span> <span id="ui-time">09:00</span></div>
+      <button id="map-btn" title="Map (M)">MAP</button>
       <div class="speed">
-        <button data-speed="pause" title="Pause">II</button>
+        <button data-speed="pause" title="Pause (Space)">II</button>
         <button data-speed="1">1x</button>
-        <button data-speed="2">2x</button>
         <button data-speed="4">4x</button>
-        <button data-speed="8">8x</button>
+        <button data-speed="16">16x</button>
+        <button data-speed="64">64x</button>
       </div>
     </header>
 
     <main>
       <div id="stage">
         <canvas id="game"></canvas>
+
         <div id="intro" class="dialog">
           <p id="intro-text">
-            You've been dropped off on a remote stretch of coast with nothing but the clothes on your back.
+            Early spring. A boat drops you on a quiet stretch of coast with nothing but the clothes on your back.
 
-            Nothing here is scripted. Every tree, every tide, every step your survivor takes is drawn from a probability distribution.
+            Nothing here is scripted. The land, the weather, the tides and every choice your survivor makes are drawn from probability distributions.
 
-            Your survivor acts on their own. Watch, wait, and see how long they last.
+            Your survivor acts on their own. Their body is simulated calorie by calorie and litre by litre. Watch, wait, and see how long they last.
 
-            (For now they can only wander. Food, fire, shelter and the rest come later.)
+            Press M for a map. Only you can see it. The survivor only knows what they've seen.
           </p>
           <button id="begin">BEGIN &#9656;</button>
+        </div>
+
+        <div id="map-overlay" class="dialog map-dialog hidden">
+          <div class="map-head">
+            <h2>MAP</h2>
+            <button id="map-close">CLOSE</button>
+          </div>
+          <canvas id="map"></canvas>
+          <p class="map-note">
+            <span class="key key-you"></span> Survivor
+            <span class="key key-water"></span> Water they know about
+            <span class="key key-view"></span> Your view
+            <br>Only you can see this map. The survivor doesn't have one.
+          </p>
         </div>
       </div>
 
@@ -44,19 +60,66 @@
         <section>
           <h2>SURVIVOR</h2>
           <dl>
-            <dt>Run</dt><dd>1</dd>
-            <dt>Level</dt><dd>1</dd>
+            <dt>Run · Level</dt><dd>1 · 1</dd>
             <dt>Days lived</dt><dd id="ui-days">0.00</dd>
             <dt>Doing</dt><dd id="ui-activity">-</dd>
           </dl>
         </section>
+
+        <section>
+          <h2>NEEDS</h2>
+          <div class="bar-row"><span>Hunger</span><div class="bar"><div id="bar-hunger" class="fill hunger"></div></div><span id="bar-hunger-v" class="bar-v">0%</span></div>
+          <div class="bar-row"><span>Thirst</span><div class="bar"><div id="bar-thirst" class="fill thirst"></div></div><span id="bar-thirst-v" class="bar-v">0%</span></div>
+          <div class="bar-row"><span>Fatigue</span><div class="bar"><div id="bar-fatigue" class="fill fatigue"></div></div><span id="bar-fatigue-v" class="bar-v">0%</span></div>
+        </section>
+
+        <section>
+          <h2>BODY</h2>
+          <dl>
+            <dt>Weight</dt><dd id="st-weight">-</dd>
+            <dt>Body fat</dt><dd id="st-fat">-</dd>
+            <dt>Lean mass</dt><dd id="st-lean">-</dd>
+            <dt>Muscle (est.)</dt><dd id="st-muscle">-</dd>
+            <dt>Glycogen</dt><dd id="st-glyc">-</dd>
+            <dt>Body water</dt><dd id="st-water">-</dd>
+            <dt>Hydration</dt><dd id="st-hydration">-</dd>
+          </dl>
+        </section>
+
+        <section>
+          <h2>ENERGY</h2>
+          <dl>
+            <dt>Basal rate</dt><dd id="st-bmr">-</dd>
+            <dt>Burning now</dt><dd id="st-rate">-</dd>
+            <dt>Burned today</dt><dd id="st-burned">-</dd>
+            <dt>Eaten today</dt><dd id="st-eaten">-</dd>
+            <dt>Drank today</dt><dd id="st-drank">-</dd>
+            <dt title="Share of energy from glycogen / fat / protein">Fuel G/F/P</dt><dd id="st-mix">-</dd>
+            <dt title="How adapted the body is to running on fat">Fat adaptation</dt><dd id="st-keto">-</dd>
+          </dl>
+        </section>
+
+        <section>
+          <h2>PROFILE</h2>
+          <dl>
+            <dt>Age · Height</dt><dd>29 · 178 cm</dd>
+            <dt>Walk speed</dt><dd>0.95 m/s</dd>
+            <dt>Metabolism</dt><dd>+8% (wasteful)</dd>
+          </dl>
+        </section>
+
         <section>
           <h2>WORLD</h2>
           <dl>
+            <dt>Season</dt><dd>Spring · Easy</dd>
+            <dt>Air temp</dt><dd id="ui-temp">-</dd>
+            <dt>Tide</dt><dd id="ui-tide">-</dd>
+            <dt>Water known</dt><dd id="ui-known">-</dd>
             <dt>Seed</dt><dd id="ui-seed">-</dd>
           </dl>
           <button id="new-world">NEW WORLD</button>
         </section>
+
         <section class="log-section">
           <h2>LOG</h2>
           <ul id="log"></ul>
@@ -68,6 +131,7 @@
   <script src="js/rng.js"></script>
   <script src="js/sprites.js"></script>
   <script src="js/world.js"></script>
+  <script src="js/physiology.js"></script>
   <script src="js/survivor.js"></script>
   <script src="js/game.js"></script>
 </body>

@@ -16,14 +16,12 @@
     B: "#33251a", // boots
   };
 
-  // Shared body rows (jacket + arms), front/back view.
   const BODY_FRONT = [
     "....jJJJJJJj....",
     "...jJJJJJJJJj...",
     "...SjJJJJJJjS...",
     "...SjJJJJJJjS...",
   ];
-
   const LEGS_STAND = [
     "....pPPPPPPp....",
     "....pPP..PPp....",
@@ -42,7 +40,6 @@
     "....BBB..PPp....",
     ".........BBB....",
   ];
-
   const HEAD_DOWN = [
     "................",
     ".....hHHHHh.....",
@@ -63,8 +60,6 @@
     "....shHHHHhs....",
     ".....sSSSSs.....",
   ];
-
-  // Side view, facing right (left is a mirror).
   const SIDE_TOP = [
     "................",
     ".....hHHHH......",
@@ -90,6 +85,25 @@
     "....pPp..pPp....",
     "...pPp....pPp...",
     "...BBB....BBBB..",
+  ];
+  // Lying on the ground, head to the left.
+  const SLEEP = [
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "................",
+    "..hHh...........",
+    ".hHHSSjJJJJJpPPB",
+    ".hHSsSjJJJJJPPPB",
+    ".hhSSsjjjjjjpppB",
+    "..hs............",
+    "................",
+    "................",
   ];
 
   const FRAMES = {
@@ -137,73 +151,82 @@
     return c;
   }
 
-  // Builds every survivor frame once at startup.
   function buildSurvivorSprites() {
     const out = {};
     for (const dir of ["down", "up", "right"]) {
       out[dir] = FRAMES[dir].map((rows) => rowsToCanvas(rows, PALETTE));
     }
     out.left = out.right.map(mirror);
+    out.sleep = rowsToCanvas(SLEEP, PALETTE);
     return out;
   }
 
-  // Procedural conifer: tiered canopy with light on the left, shade on the right.
-  function makePine(rng) {
-    const maxHalf = rng.int(6, 9);
-    const W = maxHalf * 2 + 1;
-    const H = rng.int(26, 38);
-    const trunkH = rng.int(3, 5);
-    const canopyH = H - trunkH;
-    const tiers = rng.int(3, 5);
-    const tierLen = canopyH / tiers;
+  // Broadleaf spring tree: a tall bare trunk under a wide, lumpy canopy.
+  // Kept to four flat canopy tones so it reads simply.
+  const TREE_PALETTES = [
+    { base: "#5f9e3e", light: "#80bb51", shade: "#4a8233", dark: "#376426" },
+    { base: "#6caa45", light: "#93c75c", shade: "#558f37", dark: "#3f6e2a" },
+    { base: "#579339", light: "#76b04c", shade: "#437830", dark: "#305a23" },
+  ];
+
+  function makeTree(rng) {
+    const R = rng.int(10, 14);           // canopy radius
+    const Ry = Math.round(R * 0.85);     // slightly flattened
+    const trunkH = rng.int(8, 12);       // visible trunk under the canopy
+    const W = R * 2 + 3;
+    const cx = Math.floor(W / 2), cy = Ry + 1;
+    const H = cy + Ry + trunkH + 1;
+    const pal = rng.pick(TREE_PALETTES);
+
+    // Canopy = union of a few overlapping ellipses ("lobes").
+    const lobes = [{ x: cx, y: cy, r: R * 0.78 }];
+    const n = rng.int(4, 6);
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + rng.range(-0.3, 0.3);
+      lobes.push({ x: cx + Math.cos(a) * R * 0.45, y: cy + Math.sin(a) * Ry * 0.45, r: R * rng.range(0.48, 0.58) });
+    }
+    const inside = (x, y) => {
+      for (const l of lobes) {
+        const dx = x - l.x, dy = (y - l.y) / 0.85;
+        if (dx * dx + dy * dy <= l.r * l.r) return true;
+      }
+      return false;
+    };
+
     const c = document.createElement("canvas");
     c.width = W; c.height = H;
     const ctx = c.getContext("2d");
-    const img = ctx.createImageData(W, H);
-    const d = img.data;
-    const set = (x, y, hex) => {
-      const i = (y * W + x) * 4;
-      d[i] = parseInt(hex.slice(1, 3), 16);
-      d[i + 1] = parseInt(hex.slice(3, 5), 16);
-      d[i + 2] = parseInt(hex.slice(5, 7), 16);
-      d[i + 3] = 255;
-    };
-    const DARK = "#1c3626", MID = "#2d5638", LIGHT = "#467a44", SHADE = "#234530", TIP = "#5c8f50";
-    const cx = maxHalf;
 
-    // Trunk
-    for (let y = canopyH - 2; y < H; y++) {
-      set(cx, y, "#5b3a24");
-      set(cx - 1, y, y === H - 1 ? "#4a2f1d" : "#6e4a2e");
+    // Trunk (drawn first, canopy covers its top).
+    const top = cy, bottom = H - 1;
+    for (let y = top; y <= bottom; y++) {
+      ctx.fillStyle = "#7a5636"; ctx.fillRect(cx - 1, y, 1, 1);
+      ctx.fillStyle = "#664629"; ctx.fillRect(cx, y, 1, 1);
+      ctx.fillStyle = "#4f3520"; ctx.fillRect(cx + 1, y, 1, 1);
     }
-    // Canopy
-    for (let y = 0; y < canopyH; y++) {
-      const t = Math.min(tiers - 1, Math.floor(y / tierLen));
-      const f = (y - t * tierLen) / tierLen;
-      const tierScale = (t + 1) / tiers;
-      let half = maxHalf * tierScale * (0.35 + 0.65 * f);
-      if (y < 2) half = Math.min(half, y * 0.6);
-      half += rng.range(-0.6, 0.6);
-      const hi = Math.max(0, Math.round(half));
-      for (let dx = -hi; dx <= hi; dx++) {
-        const x = cx + dx;
-        if (x < 0 || x >= W) continue;
-        const edge = Math.abs(dx) >= hi;
-        let col;
-        if (edge) col = DARK;
-        else if (dx < -hi * 0.25) col = rng.chance(0.7) ? LIGHT : MID;
-        else if (dx > hi * 0.3) col = rng.chance(0.75) ? SHADE : DARK;
-        else col = MID;
-        if (!edge && rng.chance(0.06)) col = rng.chance(0.5) ? TIP : DARK;
-        // dark underside of each tier
-        if (f > 0.85 && !edge && rng.chance(0.5)) col = DARK;
-        set(x, y, col);
+    ctx.fillStyle = "#4f3520";
+    ctx.fillRect(cx - 2, bottom, 1, 1);
+    ctx.fillRect(cx + 2, bottom, 1, 1);
+
+    // Canopy.
+    const hx = cx - R * 0.3, hy = cy - Ry * 0.35, hr = R * 0.5;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        if (!inside(x, y)) continue;
+        let col = pal.base;
+        if (!inside(x, y + 1)) col = pal.dark;
+        else if (y - cy > Ry * 0.3) col = pal.shade;
+        else {
+          const dx = x - hx, dy = (y - hy) / 0.85;
+          if (dx * dx + dy * dy < hr * hr) col = pal.light;
+        }
+        ctx.fillStyle = col;
+        ctx.fillRect(x, y, 1, 1);
       }
     }
-    ctx.putImageData(img, 0, 0);
-    return c;
+    return { canvas: c, canopyR: R };
   }
 
   window.SI = window.SI || {};
-  SI.sprites = { buildSurvivorSprites, makePine };
+  SI.sprites = { buildSurvivorSprites, makeTree };
 })();

@@ -1,40 +1,50 @@
-// World generation: coastline, beach, forest, trees and static decor.
-// The terrain is baked once into an offscreen canvas so each frame is cheap.
+// World generation: ocean on the west (left) edge, a beach, then open
+// spring woodland with a creek running down to the sea.
+// Scale: 8 px = 1 m. The terrain is baked once into an offscreen canvas.
 (function () {
   "use strict";
 
-  const W = 384, H = 216;
+  const WW = 1600, WH = 1000;        // world size in px (200 m x 125 m)
+  const PX_PER_M = 8;
+  const T = { GRASS: 0, SAND: 1, WET: 2, OCEAN: 3, CREEK: 4 };
 
-  function hexToRgb(hex) {
-    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
-  }
-
+  const rgb = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
   const C = {
-    deep: hexToRgb("#1b4a74"),
-    mid: hexToRgb("#24628f"),
-    shallow: hexToRgb("#3584ad"),
-    wet: hexToRgb("#a98f62"),
-    wet2: hexToRgb("#9c8358"),
-    sand: hexToRgb("#d9c08a"),
-    sand2: hexToRgb("#cfb57e"),
-    sand3: hexToRgb("#e4d09d"),
-    grass: hexToRgb("#4b7536"),
-    grass2: hexToRgb("#426a30"),
-    grass3: hexToRgb("#56823e"),
-    floor: hexToRgb("#365728"),
-    floor2: hexToRgb("#2f4d23"),
-    needles: hexToRgb("#5a4a2c"),
+    deep: rgb("#2a5b88"),
+    mid: rgb("#306c9b"),
+    shallow: rgb("#3b82b0"),
+    wet: rgb("#b9a277"),
+    sand: rgb("#dfca95"),
+    sand2: rgb("#d6c08a"),
+    grass: rgb("#77aa4b"),
+    grass2: rgb("#6d9f45"),
+    creek: rgb("#4a95c2"),
+    bankGrass: rgb("#5f8f3d"),
+    bankSand: rgb("#c6ae7b"),
+    flowers: [rgb("#f3d85b"), rgb("#f4f1e6"), rgb("#b593d8")],
   };
 
-  // Smooth 1D value noise in [-1, 1].
-  function noise1D(rng, spacing) {
-    const n = Math.ceil(W / spacing) + 3;
+  function noise1D(rng, spacing, len) {
+    const n = Math.ceil(len / spacing) + 3;
     const pts = [];
     for (let i = 0; i < n; i++) pts.push(rng.float() * 2 - 1);
     return (x) => {
       const f = x / spacing, i = Math.floor(f), t = f - i;
       const s = t * t * (3 - 2 * t);
       return pts[i] * (1 - s) + pts[i + 1] * s;
+    };
+  }
+
+  // Smooth 2D value noise in [0, 1].
+  function noise2D(seed, scale) {
+    return (x, y) => {
+      const fx = x / scale, fy = y / scale;
+      const ix = Math.floor(fx), iy = Math.floor(fy);
+      let tx = fx - ix, ty = fy - iy;
+      tx = tx * tx * (3 - 2 * tx); ty = ty * ty * (3 - 2 * ty);
+      const a = SI.hash2(ix, iy, seed), b = SI.hash2(ix + 1, iy, seed);
+      const c = SI.hash2(ix, iy + 1, seed), d = SI.hash2(ix + 1, iy + 1, seed);
+      return (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
     };
   }
 
@@ -51,125 +61,185 @@
     const rng = rootRng.fork("world");
     const seed = rng.int(0, 2 ** 31);
 
-    // Coastline (ocean at the bottom) and forest edge, one value per column.
-    const sA = noise1D(rng, 64), sB = noise1D(rng, 19);
-    const fA = noise1D(rng, 48), fB = noise1D(rng, 13);
-    const shore = new Int16Array(W), forest = new Int16Array(W);
-    for (let x = 0; x < W; x++) {
-      shore[x] = Math.round(H * 0.78 + sA(x) * 9 + sB(x) * 2.5);
-      forest[x] = Math.round(H * 0.4 + fA(x) * 16 + fB(x) * 4);
-      forest[x] = Math.min(forest[x], shore[x] - 40);
+    // --- Coastline: one x per row. ---
+    const sA = noise1D(rng, 110, WH), sB = noise1D(rng, 27, WH), bA = noise1D(rng, 80, WH);
+    const shore = new Int16Array(WH), sandEdge = new Int16Array(WH);
+    for (let y = 0; y < WH; y++) {
+      shore[y] = Math.round(150 + sA(y) * 26 + sB(y) * 4);
+      sandEdge[y] = shore[y] + Math.round(72 + bA(y) * 20);
     }
 
-    // --- Bake terrain pixels ---
+    // --- Creek: a random walk from the east edge down to the sea. ---
+    const creek = [];
+    {
+      let x = WW + 8, y = rng.range(WH * 0.3, WH * 0.7), ang = Math.PI;
+      let guard = 0;
+      while (guard++ < 2000) {
+        const yi = Math.max(0, Math.min(WH - 1, Math.round(y)));
+        if (x < shore[yi] - 10) break;
+        creek.push({ x, y });
+        ang += rng.normal(0, 0.16) + (Math.PI - ang) * 0.06;
+        if (y < 120) ang -= 0.05;
+        if (y > WH - 120) ang += 0.05;
+        x += Math.cos(ang) * 4;
+        y += Math.sin(ang) * 4;
+      }
+    }
+
+    // --- Terrain type map ---
+    const type = new Uint8Array(WW * WH);
+    const bank = new Uint8Array(WW * WH);
+    const CR = 3;
+    for (const p of creek) {
+      for (let dy = -CR - 1; dy <= CR + 1; dy++) {
+        for (let dx = -CR - 1; dx <= CR + 1; dx++) {
+          const x = Math.round(p.x) + dx, y = Math.round(p.y) + dy;
+          if (x < 0 || y < 0 || x >= WW || y >= WH) continue;
+          const d2 = dx * dx + dy * dy;
+          if (d2 <= CR * CR) type[y * WW + x] = T.CREEK;
+          else if (d2 <= (CR + 1.5) * (CR + 1.5)) bank[y * WW + x] = 1;
+        }
+      }
+    }
+
+    // --- Bake terrain pixels (flat colours, low detail) ---
     const terrain = document.createElement("canvas");
-    terrain.width = W; terrain.height = H;
+    terrain.width = WW; terrain.height = WH;
     const tctx = terrain.getContext("2d");
-    const img = tctx.createImageData(W, H);
+    const img = tctx.createImageData(WW, WH);
     const d = img.data;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const r = SI.hash2(x, y, seed);
-        const r2 = SI.hash2(x + 911, y + 37, seed);
+    const patch = noise2D(seed, 56);
+    const edgeN = noise2D(seed + 7, 7);
+    for (let y = 0; y < WH; y++) {
+      const sx = shore[y], se = sandEdge[y];
+      for (let x = 0; x < WW; x++) {
+        const k = y * WW + x;
         let col;
-        const sy = shore[x];
-        if (y >= sy + 8) {
-          const depth = y - sy - 8 + (r - 0.5) * 6;
-          col = depth < 10 ? C.shallow : depth < 26 ? C.mid : C.deep;
-        } else if (y >= sy - 8) {
-          col = r < 0.3 ? C.wet2 : C.wet;
-          if (y < sy - 5 && r2 < 0.5) col = C.sand2;
+        if (type[k] === T.CREEK) {
+          col = C.creek;
+        } else if (x < sx - 5) {
+          type[k] = T.OCEAN;
+          const dist = sx - 5 - x;
+          col = dist < 14 ? C.shallow : dist < 40 ? C.mid : C.deep;
+        } else if (x < sx + 7) {
+          type[k] = T.WET;
+          col = C.wet;
+        } else if (x < se + (edgeN(x, y) - 0.5) * 10) {
+          type[k] = T.SAND;
+          col = bank[k] ? C.bankSand : patch(x, y) > 0.62 ? C.sand2 : C.sand;
         } else {
-          const toForest = y - forest[x] + (r - 0.5) * 7;
-          if (toForest >= 0) {
-            col = r2 < 0.18 ? C.sand2 : r2 > 0.9 ? C.sand3 : C.sand;
-          } else {
-            const depth = -toForest;
-            if (depth < 10) col = r2 < 0.3 ? C.grass2 : r2 > 0.85 ? C.grass3 : C.grass;
-            else if (depth < 24) col = r2 < 0.45 ? C.floor : r2 > 0.9 ? C.grass2 : C.grass;
-            else col = r2 < 0.5 ? C.floor2 : r2 > 0.93 ? C.needles : C.floor;
+          type[k] = T.GRASS;
+          if (bank[k]) col = C.bankGrass;
+          else {
+            col = patch(x + 500, y) > 0.55 ? C.grass2 : C.grass;
+            const r = SI.hash2(x, y, seed);
+            if (r < 0.0012) col = C.flowers[Math.floor(SI.hash2(y, x, seed) * 3)];
           }
         }
-        const i = (y * W + x) * 4;
+        const i = k * 4;
         d[i] = col[0]; d[i + 1] = col[1]; d[i + 2] = col[2]; d[i + 3] = 255;
       }
     }
     tctx.putImageData(img, 0, 0);
 
-    // --- Trees: dart-throwing with a minimum spacing, denser deeper in. ---
+    const nearCreek = (x, y, r) => {
+      for (let dy = -r; dy <= r; dy += 2)
+        for (let dx = -r; dx <= r; dx += 2) {
+          const xx = Math.round(x + dx), yy = Math.round(y + dy);
+          if (xx >= 0 && yy >= 0 && xx < WW && yy < WH && type[yy * WW + xx] === T.CREEK) return true;
+        }
+      return false;
+    };
+
+    // --- Trees: well spaced, sparse near the beach, denser inland. ---
     const trees = [];
-    const minDist = 10;
-    for (let attempt = 0; attempt < 1400; attempt++) {
-      const x = rng.range(2, W - 2);
-      const y = rng.range(6, H);
-      const fx = forest[Math.floor(x)];
-      if (y > fx + 4) continue;
-      const depth = fx - y;
-      const pAccept = Math.min(1, 0.25 + depth / 45);
-      if (!rng.chance(pAccept)) continue;
+    const minDist = 34;
+    for (let attempt = 0; attempt < 3000; attempt++) {
+      const x = rng.range(8, WW - 8);
+      const y = rng.range(14, WH - 2);
+      const yi = Math.floor(y);
+      const inland = x - sandEdge[yi];
+      if (inland < 14) continue;
+      const p = 0.25 + 0.6 * Math.min(1, inland / 900);
+      if (!rng.chance(p)) continue;
+      if (nearCreek(x, y, 10)) continue;
       let ok = true;
       for (const t of trees) {
-        const dx = t.x - x, dy = (t.y - y) * 1.4;
+        const dx = t.x - x, dy = (t.y - y) * 1.2;
         if (dx * dx + dy * dy < minDist * minDist) { ok = false; break; }
       }
       if (!ok) continue;
-      const sprite = SI.sprites.makePine(rng);
-      trees.push({ x: Math.round(x), y: Math.round(y), sprite, r: 3 });
+      const spr = SI.sprites.makeTree(rng);
+      trees.push({ x: Math.round(x), y: Math.round(y), sprite: spr.canvas, canopyR: spr.canopyR, r: 2 });
     }
     trees.sort((a, b) => a.y - b.y);
-
-    // Tree shadows baked into the ground.
     for (const t of trees) {
-      pixelEllipse(tctx, t.x + 1, t.y, Math.floor(t.sprite.width / 2) - 1, 2, "rgba(10,25,10,0.28)");
+      pixelEllipse(tctx, t.x + 1, t.y - 1, Math.round(t.canopyR * 0.9), 3, "rgba(30,60,20,0.22)");
     }
 
-    // --- Decor: rocks + driftwood on the beach, shrubs in the forest. ---
+    // Spatial grid for fast collision lookups.
+    const CELL = 32, gw = Math.ceil(WW / CELL), gh = Math.ceil(WH / CELL);
+    const grid = Array.from({ length: gw * gh }, () => []);
+    for (const t of trees) grid[Math.floor(t.y / CELL) * gw + Math.floor(t.x / CELL)].push(t);
+
+    // --- Decor ---
     const rocks = [];
-    const nRocks = rng.int(5, 10);
+    const nRocks = rng.int(6, 10);
     for (let i = 0; i < nRocks; i++) {
-      const x = rng.int(6, W - 6);
-      const y = rng.int(forest[x] + 8, shore[x] - 2);
-      const s = rng.int(1, 3);
-      pixelEllipse(tctx, x, y + 1, s + 1, 1, "rgba(0,0,0,0.25)");
-      pixelEllipse(tctx, x, y, s + 1, s, "#7d7b74");
-      tctx.fillStyle = "#9d9a90";
-      tctx.fillRect(x - s, y - s + 1, s, 1);
+      const y = rng.int(20, WH - 20);
+      const x = rng.int(shore[y] + 12, sandEdge[y] - 4);
+      if (nearCreek(x, y, 6)) continue;
+      const s = rng.int(2, 3);
+      pixelEllipse(tctx, x + 1, y + 1, s + 1, 1, "rgba(0,0,0,0.18)");
+      pixelEllipse(tctx, x, y, s + 1, s - 1, "#8a877e");
+      tctx.fillStyle = "#a3a095";
+      tctx.fillRect(x - s + 1, y - s + 1, s, 1);
       rocks.push({ x, y, r: s + 1 });
     }
-    const nWood = rng.int(2, 4);
+    const nWood = rng.int(3, 6);
     for (let i = 0; i < nWood; i++) {
-      const x = rng.int(12, W - 24);
-      const y = rng.int(shore[x] - 16, shore[x] - 8);
-      const len = rng.int(8, 16);
-      tctx.fillStyle = "rgba(0,0,0,0.22)";
-      tctx.fillRect(x + 1, y + 2, len, 1);
-      tctx.fillStyle = "#8b7a63";
-      tctx.fillRect(x, y, len, 2);
-      tctx.fillStyle = "#a8977c";
-      tctx.fillRect(x + 1, y, len - 2, 1);
-      tctx.fillStyle = "#6e5f4b";
-      tctx.fillRect(x, y, 1, 2);
+      const y = rng.int(20, WH - 20);
+      const x = rng.int(shore[y] + 10, shore[y] + 30);
+      const len = rng.int(10, 18);
+      tctx.fillStyle = "#94836a";
+      tctx.fillRect(x, y, 2, len);
+      tctx.fillStyle = "#ad9c80";
+      tctx.fillRect(x, y + 1, 1, len - 2);
     }
-    const nShrubs = rng.int(25, 45);
-    for (let i = 0; i < nShrubs; i++) {
-      const x = rng.int(4, W - 4);
-      const y = rng.int(4, forest[x] + 2);
-      const s = rng.int(2, 3);
-      pixelEllipse(tctx, x, y, s + 1, s - 1, "#2a4a22");
-      pixelEllipse(tctx, x - 1, y - 1, s - 1, s - 2 || 1, "#3f6a30");
+    const nBush = rng.int(50, 80);
+    for (let i = 0; i < nBush; i++) {
+      const y = rng.int(10, WH - 10);
+      const x = rng.int(sandEdge[y] + 12, WW - 8);
+      if (nearCreek(x, y, 6)) continue;
+      pixelEllipse(tctx, x, y, 4, 2, "#4f8434");
+      pixelEllipse(tctx, x - 1, y - 1, 2, 1, "#66a043");
     }
 
-    return { W, H, seed, shore, forest, terrain, trees, rocks };
+    return { W: WW, H: WH, seed, shore, sandEdge, creek, type, terrain, trees, grid, gridW: gw, CELL, rocks };
   }
 
-  // Is (x, y) a place the survivor's feet can stand?
+  function terrainAt(world, x, y) {
+    const xi = Math.floor(x), yi = Math.floor(y);
+    if (xi < 0 || yi < 0 || xi >= world.W || yi >= world.H) return T.OCEAN;
+    return world.type[yi * world.W + xi];
+  }
+
+  // Can the survivor's feet stand at (x, y)?
   function walkable(world, x, y) {
-    if (x < 4 || x > W - 5 || y < 10 || y > H - 2) return false;
-    const xi = Math.floor(x);
-    if (y > world.shore[xi] - 9) return false;
-    for (const t of world.trees) {
-      const dx = t.x - x, dy = (t.y - 1 - y) * 1.5;
-      if (dx * dx + dy * dy < (t.r + 2) * (t.r + 2)) return false;
+    if (x < 4 || x > world.W - 5 || y < 14 || y > world.H - 2) return false;
+    if (x < world.shore[Math.floor(y)] + 3) return false;
+    const { grid, gridW, CELL } = world;
+    const cx = Math.floor(x / CELL), cy = Math.floor(y / CELL);
+    for (let gy = cy - 1; gy <= cy + 1; gy++) {
+      for (let gx = cx - 1; gx <= cx + 1; gx++) {
+        if (gx < 0 || gy < 0 || gx >= gridW) continue;
+        const cell = grid[gy * gridW + gx];
+        if (!cell) continue;
+        for (const t of cell) {
+          const dx = t.x - x, dy = (t.y - 1 - y) * 1.5;
+          if (dx * dx + dy * dy < 16) return false;
+        }
+      }
     }
     for (const r of world.rocks) {
       const dx = r.x - x, dy = (r.y - y) * 1.5;
@@ -179,5 +249,5 @@
   }
 
   window.SI = window.SI || {};
-  SI.world = { W, H, generate, walkable, pixelEllipse };
+  SI.world = { WW, WH, PX_PER_M, T, generate, walkable, terrainAt, pixelEllipse };
 })();
